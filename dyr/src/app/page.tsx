@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface Diario {
   nombre: string;
@@ -25,7 +25,26 @@ const DIARIOS: Diario[] = [
   { nombre: "Télam", url: "https://www.telam.com.ar", dominio: "www.telam.com.ar" },
 ];
 
+function useHora() {
+  const [hora, setHora] = useState("");
+  useEffect(() => {
+    const fmt = () =>
+      new Date().toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+    setHora(fmt());
+    const id = setInterval(() => setHora(fmt()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  return hora;
+}
+
 function GrillaDiarios({ onSelect }: { onSelect: (d: Diario) => void }) {
+  const hora = useHora();
+  const fecha = new Date().toLocaleDateString("es-AR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#FDF6E3", color: "#1A1A1A" }}>
       <header className="py-6 px-4 text-center border-b-2 border-[#1A1A1A]">
@@ -35,6 +54,11 @@ function GrillaDiarios({ onSelect }: { onSelect: (d: Diario) => void }) {
         <p style={{ fontFamily: "Georgia, serif", fontSize: "16px", marginTop: "4px" }}>
           El puesto de diarios no cerr&oacute;. Se mud&oacute;.
         </p>
+        {hora && (
+          <p style={{ fontSize: "15px", marginTop: "8px", textTransform: "capitalize" }}>
+            {fecha} &mdash; {hora}
+          </p>
+        )}
       </header>
 
       <main className="flex-1 px-4 py-6">
@@ -71,68 +95,126 @@ function GrillaDiarios({ onSelect }: { onSelect: (d: Diario) => void }) {
   );
 }
 
+type Estado = "cargando" | "ok" | "error";
+
 function Lector({ diario, onBack }: { diario: Diario; onBack: () => void }) {
-  const [blocked, setBlocked] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const [estado, setEstado] = useState<Estado>("cargando");
+  const [reloadKey, setReloadKey] = useState(0);
+  const loadedRef = useRef(false);
 
-  const handleLoad = useCallback(() => {
-    setLoaded(true);
-  }, []);
-
-  const handleError = useCallback(() => {
-    setBlocked(true);
-  }, []);
+  const proxyUrl = `/api/proxy?url=${encodeURIComponent(diario.url)}`;
 
   useEffect(() => {
-    // Timeout fallback: if iframe hasn't loaded in 5 seconds, assume blocked
+    // Reset on new diario or reload
+    setEstado("cargando");
+    loadedRef.current = false;
+
     const timer = setTimeout(() => {
-      if (!loaded) {
-        setBlocked(true);
-      }
-    }, 5000);
+      if (!loadedRef.current) setEstado("error");
+    }, 15_000);
+
     return () => clearTimeout(timer);
-  }, [loaded]);
+  }, [diario.url, reloadKey]);
+
+  function handleLoad() {
+    loadedRef.current = true;
+    setEstado("ok");
+  }
+
+  function handleError() {
+    setEstado("error");
+  }
+
+  function recargar() {
+    setReloadKey((k) => k + 1);
+  }
 
   return (
     <div className="flex flex-col h-screen" style={{ backgroundColor: "#FDF6E3", color: "#1A1A1A" }}>
       <header
-        className="flex items-center border-b-2 border-[#1A1A1A] px-3 py-0"
+        className="flex items-center gap-3 border-b-2 border-[#1A1A1A] px-3"
         style={{ minHeight: "64px", flexShrink: 0 }}
       >
         <button
           onClick={onBack}
-          className="border-2 border-[#1A1A1A] px-4 py-3 font-bold cursor-pointer"
           style={{
             backgroundColor: "#1A1A1A",
             color: "#FDF6E3",
             fontSize: "20px",
+            fontWeight: "bold",
+            padding: "10px 18px",
+            border: "none",
+            cursor: "pointer",
             flexShrink: 0,
           }}
         >
-          &larr; Volver a D&amp;R
+          &larr; Volver
         </button>
+
         <span
-          className="flex-1 text-center font-bold truncate px-3"
+          className="flex-1 text-center font-bold truncate"
           style={{ fontSize: "20px" }}
         >
           {diario.nombre}
         </span>
+
+        <button
+          onClick={recargar}
+          style={{
+            backgroundColor: "#FDF6E3",
+            color: "#1A1A1A",
+            fontSize: "18px",
+            fontWeight: "bold",
+            padding: "10px 14px",
+            border: "2px solid #1A1A1A",
+            cursor: "pointer",
+            flexShrink: 0,
+          }}
+          title="Actualizar"
+        >
+          ↺
+        </button>
       </header>
 
-      {blocked ? (
+      {estado === "cargando" && (
+        <div
+          className="flex-1 flex items-center justify-center"
+          style={{ fontSize: "20px" }}
+        >
+          Cargando {diario.nombre}...
+        </div>
+      )}
+
+      {estado === "error" && (
         <div className="flex-1 flex flex-col items-center justify-center px-6 text-center gap-6">
           <p style={{ fontSize: "22px", fontWeight: "bold" }}>
-            Este diario no permite lectura integrada
+            No se pudo cargar {diario.nombre}
           </p>
+          <button
+            onClick={recargar}
+            style={{
+              backgroundColor: "#1A1A1A",
+              color: "#FDF6E3",
+              fontSize: "20px",
+              fontWeight: "bold",
+              padding: "14px 28px",
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            Reintentar
+          </button>
           <a
             href={diario.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="border-2 border-[#1A1A1A] px-6 py-4 font-bold"
             style={{
-              backgroundColor: "#1A1A1A",
-              color: "#FDF6E3",
-              fontSize: "22px",
+              backgroundColor: "#FDF6E3",
+              color: "#1A1A1A",
+              fontSize: "18px",
+              fontWeight: "bold",
+              padding: "12px 24px",
+              border: "2px solid #1A1A1A",
               textDecoration: "none",
               display: "inline-block",
             }}
@@ -140,17 +222,22 @@ function Lector({ diario, onBack }: { diario: Diario; onBack: () => void }) {
             Abrir en el navegador
           </a>
         </div>
-      ) : (
-        <iframe
-          src={diario.url}
-          title={diario.nombre}
-          onLoad={handleLoad}
-          onError={handleError}
-          className="flex-1 w-full border-0"
-          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-          referrerPolicy="no-referrer"
-        />
       )}
+
+      {/* iframe siempre montado para que onLoad/onError disparen */}
+      <iframe
+        key={reloadKey}
+        src={proxyUrl}
+        title={diario.nombre}
+        onLoad={handleLoad}
+        onError={handleError}
+        style={{
+          flex: 1,
+          width: "100%",
+          border: "none",
+          display: estado === "error" ? "none" : "block",
+        }}
+      />
     </div>
   );
 }
