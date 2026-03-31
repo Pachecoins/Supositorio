@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@theme {
+  --color-crema: #FDF6E3;
+  --color-negro: #1A1A1A;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #FDF6E3;
+  color: #1A1A1A;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 18px;
+  -webkit-tap-highlight-color: transparent;
+}
